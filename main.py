@@ -17,6 +17,8 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--adj_threshold', type=float, default=0.3)
+    parser.add_argument('--keep_edge_weights', action='store_true')
+    parser.add_argument('--load_saved', action='store_true')
     parser.add_argument('--train_ratio', type=float, default=0.8)
     parser.add_argument('--val_ratio', type=float, default=0.1)
     parser.add_argument('--hidden_dim', type=int, default=64)
@@ -28,10 +30,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     train_loader, test_loader, val_loader = load_data(args)
+    print("Data loaded")
     args.in_dim = train_loader.dataset[0].x.size(1)
     args.n1 = train_loader.dataset[0].x.size(0)
     args.n2 = args.n1 // args.reduction_factor
     args.n3 = args.n2 // args.reduction_factor
+    args.out_dim = 2
     
     model = Classify_with_GAE(args).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
