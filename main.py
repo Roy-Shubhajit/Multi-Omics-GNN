@@ -11,6 +11,7 @@ from torch_geometric.utils import to_edge_index
 import torch
 from utils import *
 from network import Classify_with_GAE
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -19,6 +20,7 @@ if __name__ == "__main__":
     parser.add_argument('--adj_threshold', type=float, default=0.3)
     parser.add_argument('--keep_edge_weights', action='store_true')
     parser.add_argument('--load_saved', action='store_true')
+    parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--train_ratio', type=float, default=0.8)
     parser.add_argument('--val_ratio', type=float, default=0.1)
     parser.add_argument('--hidden_dim', type=int, default=64)
@@ -54,6 +56,7 @@ if __name__ == "__main__":
         pred_classification = torch.tensor([]).to(device)
         orig_classification = torch.tensor([]).to(device)
         for data in train_loader:
+            print(data)
             optimizer.zero_grad()
             x = data.x.to(device)
             edge_index = data.edge_index.to(device)
@@ -64,6 +67,8 @@ if __name__ == "__main__":
             orig_GAE = torch.cat((orig_GAE, x), dim=0)
             pred_classification = torch.cat((pred_classification, class_prob), dim=0)
             orig_classification = torch.cat((orig_classification, y), dim=0)
+            del x, edge_index, edge_attr, y
+            torch.cuda.empty_cache()
             loss_mincut += sum(mincut_losses)
             loss_ortho += sum(ortho_losses)
             

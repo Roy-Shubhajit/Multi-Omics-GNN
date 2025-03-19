@@ -1,5 +1,6 @@
 import torch
-from torch_geometric.nn import GCNConv, dense_mincut_pool
+from utils import dense_mincut_pool
+from torch_geometric.nn import GCNConv
 import torch.nn.functional as F
 from torch_geometric.utils import to_dense_adj, to_edge_index
 
@@ -26,18 +27,22 @@ class GAE_Encoder(torch.nn.Module):
         x1 = F.relu(self.conv1(x, edge_index1, edge_attr1))
         s1 = F.relu(self.lt1(x1))
         x1_bar, adj1, mincut_loss1, ortho_loss1 = dense_mincut_pool(x1, adj0, s1)
+        x1_bar = x1_bar.squeeze(0)
+        adj1 = adj1.squeeze(0)
         
         edge_index2, edge_attr2 = to_edge_index(adj1.to_sparse())
-        print(x1_bar.size(), edge_index2.size(), edge_attr2.size())
         x2 = F.relu(self.conv2(x1_bar, edge_index2, edge_attr2))
         s2 = F.relu(self.lt2(x2))
         x2_bar, adj2, mincut_loss2, ortho_loss2 = dense_mincut_pool(x2, adj1, s2)
+        x2_bar = x2_bar.squeeze(0)
+        adj2 = adj2.squeeze(0)
         
         edge_index3, edge_attr3 = to_edge_index(adj2.to_sparse())
         x3 = F.relu(self.conv3(x2_bar, edge_index3, edge_attr3))
         s3 = F.relu(self.lt3(x3))
         x3_bar, adj3, mincut_loss3, ortho_loss3 = dense_mincut_pool(x3, adj2, s3)
-        
+        x3_bar = x3_bar.squeeze(0)
+        adj3 = adj3.squeeze(0)
         return x3_bar, adj3, (s1, s2, s3), (mincut_loss1, mincut_loss2, mincut_loss3), (ortho_loss1, ortho_loss2, ortho_loss3)
         
 class GAE_Decoder(torch.nn.Module):
@@ -53,17 +58,18 @@ class GAE_Decoder(torch.nn.Module):
         self.conv3.reset_parameters()
         
     def forward(self, x3_bar, adj3, Ss):
-        x3_dash = x3_bar@Ss[2]
+        x3_dash = Ss[2]@x3_bar
+        print(Ss[2].shape, adj3.shape, x3_bar.shape)
         adj3_dash = Ss[2]@adj3@Ss[2].T
         edge_index3, edge_attr3 = to_edge_index(adj3_dash.to_sparse())
         x2_bar = F.relu(self.conv1(x3_dash, edge_index3, edge_attr3))
         
-        x2_dash = x2_bar@Ss[1]
+        x2_dash = Ss[1]@x2_bar
         adj2_dash = Ss[1]@adj3_dash@Ss[1].T
         edge_index2, edge_attr2 = to_edge_index(adj2_dash.to_sparse())
         x1_bar = F.relu(self.conv2(x2_dash, edge_index2, edge_attr2))
         
-        x1_dash = x1_bar@Ss[0]
+        x1_dash = Ss[0]@x1_bar
         adj1_dash = Ss[0]@adj2_dash@Ss[0].T
         edge_index1, edge_attr1 = to_edge_index(adj1_dash.to_sparse())
         x_bar = F.relu(self.conv3(x1_dash, edge_index1, edge_attr1))
@@ -75,7 +81,7 @@ class Classify_with_GAE(torch.nn.Module):
         super(Classify_with_GAE, self).__init__()
         self.encoder = GAE_Encoder(args)
         self.decoder = GAE_Decoder(args)
-        self.classifier = torch.nn.Linear(args.n3, args.out_dim)
+        self.classifier = torch.nn.Linear(args.hidden_dim, args.out_dim)
         
     def forward(self, x, edge_index, edge_attr):
         if edge_attr.dtype is torch.bool:
